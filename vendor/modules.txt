@@ -1,7 +1,7 @@
 # github.com/cockroachdb/apd v1.1.0
 ## explicit
 # github.com/go-sql-driver/mysql v1.5.0
-## explicit
+## explicit; go 1.10
 github.com/go-sql-driver/mysql
 # github.com/gofrs/uuid v3.2.0+incompatible
 ## explicit
@@ -28,14 +28,14 @@ github.com/lib/pq/scram
 ## explicit
 github.com/pkg/errors
 # github.com/shopspring/decimal v0.0.0-20200227202807-02e2044944cc
-## explicit
+## explicit; go 1.13
 # github.com/ziutek/mymysql v1.5.4
 ## explicit
 github.com/ziutek/mymysql/godrv
 github.com/ziutek/mymysql/mysql
 github.com/ziutek/mymysql/native
 # golang.org/x/crypto v0.0.0-20200403201458-baeed622b8d8
-## explicit
+## explicit; go 1.11
 golang.org/x/crypto/pbkdf2
 # golang.org/x/text v0.3.2
 ## explicit
