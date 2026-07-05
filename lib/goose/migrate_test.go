@@ -38,6 +38,21 @@ func TestMigrationMapSortDown(t *testing.T) {
 	validateMigrationSort(t, ms, sorted)
 }
 
+func TestLockDBNoopForNonPostgres(t *testing.T) {
+
+	conf := &DBConf{Driver: DBDriver{Name: "mysql", Dialect: &MySqlDialect{}}}
+
+	// nil db must be safe: non-postgres dialects return before touching it.
+	unlock, err := lockDB(conf, nil)
+	if err != nil {
+		t.Fatalf("lockDB on mysql dialect: %v", err)
+	}
+	if unlock == nil {
+		t.Fatal("lockDB returned nil unlock")
+	}
+	unlock()
+}
+
 func validateMigrationSort(t *testing.T, ms migrationSorter, sorted []int64) {
 
 	for i, m := range ms {

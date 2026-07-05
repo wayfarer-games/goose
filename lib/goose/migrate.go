@@ -1,6 +1,7 @@
 package goose
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -58,8 +59,54 @@ func RunMigrations(conf *DBConf, migrationsDir string, target int64) (err error)
 	return RunMigrationsOnDb(conf, migrationsDir, target, db)
 }
 
+// lockDB serializes concurrent migrators. Multiple replicas of a service
+// run `goose up` at startup simultaneously; without a lock the losers fail
+// mid-DDL (e.g. "duplicate key value violates unique constraint
+// pg_type_typname_nsp_index") and crash. With the lock they queue behind the
+// winner, then see nothing left to apply and proceed cleanly.
+//
+// Postgres-only: takes a session-level advisory lock on a dedicated
+// connection (session locks are connection-scoped, so the same connection
+// must hold it for the whole run and release it). The key is derived from
+// the current database name so services migrating different databases on a
+// shared instance don't serialize against each other. Other dialects return
+// a no-op unlock.
+func lockDB(conf *DBConf, db *sql.DB) (unlock func(), err error) {
+	if _, ok := conf.Driver.Dialect.(*PostgresDialect); !ok {
+		return func() {}, nil
+	}
+
+	const lockKey = "hashtext(current_database())::bigint"
+
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire migration lock connection: %w", err)
+	}
+
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock("+lockKey+")"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("acquire migration advisory lock: %w", err)
+	}
+
+	return func() {
+		// Best-effort: closing the connection releases the session lock
+		// anyway, but unlock explicitly to return the connection clean.
+		if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_unlock("+lockKey+")"); err != nil {
+			log.Printf("goose: release migration advisory lock: %v", err)
+		}
+		conn.Close()
+	}, nil
+}
+
 // Runs migration on a specific database instance.
 func RunMigrationsOnDb(conf *DBConf, migrationsDir string, target int64, db *sql.DB) (err error) {
+	unlock, err := lockDB(conf, db)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	current, err := EnsureDBVersion(conf, db)
 	if err != nil {
 		return err
